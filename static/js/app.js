@@ -80,6 +80,10 @@ uploadInput.addEventListener('change', async (e) => {
         
         btnApplyAll.disabled = false;
         btnExport.disabled = false;
+        
+        // Trigger background processing for OCR/Classification
+        processAsyncClassification(data.pdfs);
+        
     } catch (error) {
         updateStatus(`Error: ${error.message}`);
     } finally {
@@ -305,4 +309,42 @@ function updateStatus(msg) {
     setTimeout(() => {
         statusMessage.style.opacity = 1;
     }, 100);
+}
+
+async function processAsyncClassification(newPdfs) {
+    for (const filename in newPdfs) {
+        for (let i = 0; i < newPdfs[filename].pages.length; i++) {
+            const page = newPdfs[filename].pages[i];
+            if (page.document_type === 'Pending') {
+                try {
+                    const response = await fetch('/api/classify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path: page.path })
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        page.document_type = result.document_type;
+                        page.crop_data = result.crop_data;
+                        
+                        // Auto-update custom name
+                        let baseName = filename.split('.').slice(0, -1).join('.');
+                        page.custom_name = result.document_type === 'None' ? baseName : `${baseName}_${result.document_type}`;
+                        
+                        // If this page is currently active in UI, update UI
+                        if (currentFilename === filename && currentPageIndex === i) {
+                            selectDocType.value = page.document_type;
+                            inputCustomName.value = page.custom_name;
+                            if (currentCropMode === 'document' && page.crop_data && cropper) {
+                                cropper.setData(page.crop_data);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("Async classification failed for", filename, i, e);
+                }
+            }
+        }
+    }
 }

@@ -109,16 +109,13 @@ def upload_files():
                     page_path = os.path.join(TEMP_IMAGES_FOLDER, page_name)
                     img.save(page_path, 'JPEG')
                     
-                    # Classify and get adaptive crop
-                    doc_type, auto_crop = DocumentClassifier.classify_and_crop(img)
-                    
                     pages_info.append({
                         'page_index': idx,
                         'url': url_for('temp_image', filename=page_name),
                         'path': page_path,
-                        'document_type': doc_type,
-                        'custom_name': f"{os.path.splitext(filename)[0]}_{doc_type}",
-                        'crop_data': auto_crop
+                        'document_type': "Pending",
+                        'custom_name': f"{os.path.splitext(filename)[0]}_Pending",
+                        'crop_data': None
                     })
                     
                 pdf_data[filename] = {
@@ -141,6 +138,24 @@ def get_unique_filename(directory, base_name, extension):
         filename = f"{base_name}_{counter}{extension}"
         counter += 1
     return filename
+
+@app.route('/api/classify', methods=['POST'])
+def classify_page():
+    data = request.json
+    page_path = data.get('path')
+    
+    if not page_path or not os.path.exists(page_path):
+        return jsonify({'error': 'File not found'}), 404
+        
+    try:
+        img = Image.open(page_path)
+        doc_type, auto_crop = DocumentClassifier.classify_and_crop(img)
+        return jsonify({
+            'document_type': doc_type,
+            'crop_data': auto_crop
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/export', methods=['POST'])
 def export_files():
