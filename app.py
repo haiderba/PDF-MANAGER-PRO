@@ -1,13 +1,12 @@
 import os
+import io
 import json
+import zipfile
 import shutil
-from flask import Flask, render_template, request, jsonify, url_for, send_from_directory
+from flask import Flask, render_template, request, jsonify, url_for, send_from_directory, send_file
 from pdf2image import convert_from_path
 from PIL import Image
 from werkzeug.utils import secure_filename
-import pytesseract
-import cv2
-import numpy as np
 
 app = Flask(__name__)
 
@@ -21,65 +20,6 @@ for folder in [UPLOAD_FOLDER, TEMP_IMAGES_FOLDER, OUTPUT_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-class DocumentClassifier:
-    @staticmethod
-    def classify_and_crop(pil_img):
-        # OCR for text classification
-        try:
-            text = pytesseract.image_to_string(pil_img).lower()
-        except Exception as e:
-            print(f"OCR Error: {e}")
-            text = ""
-            
-        doc_type = "Unknown"
-        if any(keyword in text for keyword in ["iqama", "resident", "identity", "kingdom of saudi arabia"]):
-            doc_type = "Iqama_ID"
-        elif any(keyword in text for keyword in ["insurance", "policy", "medical", "health"]):
-            doc_type = "Insurance_Paper"
-            
-        auto_crop = None
-        
-        # OpenCV Adaptive Cropping for ID Cards
-        if doc_type == "Iqama_ID":
-            try:
-                cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-                gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
-                blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-                edged = cv2.Canny(blurred, 50, 150)
-                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
-                dilated = cv2.dilate(edged, kernel, iterations=2)
-                
-                contours, _ = cv2.findContours(dilated.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                
-                if contours:
-                    contours = sorted(contours, key=cv2.contourArea, reverse=True)[:5]
-                    for c in contours:
-                        peri = cv2.arcLength(c, True)
-                        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-                        x, y, w, h = cv2.boundingRect(approx)
-                        
-                        area = w * h
-                        img_area = cv_img.shape[0] * cv_img.shape[1]
-                        
-                        aspect_ratio = w / float(h)
-                        if aspect_ratio < 1:
-                            aspect_ratio = 1 / aspect_ratio
-                            
-                        # Card area > 5% of page, aspect ratio between 1.2 and 2.0
-                        if area > img_area * 0.05 and 1.2 < aspect_ratio < 2.0:
-                            margin = 15
-                            auto_crop = {
-                                "x": max(0, x - margin),
-                                "y": max(0, y - margin),
-                                "width": min(cv_img.shape[1] - x, w + 2*margin),
-                                "height": min(cv_img.shape[0] - y, h + 2*margin)
-                            }
-                            break
-            except Exception as e:
-                print(f"OpenCV Error: {e}")
-
-        return doc_type, auto_crop
 
 @app.route('/')
 def index():
@@ -113,8 +53,8 @@ def upload_files():
                         'page_index': idx,
                         'url': url_for('temp_image', filename=page_name),
                         'path': page_path,
-                        'document_type': "Pending",
-                        'custom_name': f"{os.path.splitext(filename)[0]}_Pending",
+                        'document_type': "None",
+                        'custom_name': f"{os.path.splitext(filename)[0]}",
                         'crop_data': None
                     })
                     
@@ -139,29 +79,16 @@ def get_unique_filename(directory, base_name, extension):
         counter += 1
     return filename
 
-@app.route('/api/classify', methods=['POST'])
-def classify_page():
-    data = request.json
-    page_path = data.get('path')
-    
-    if not page_path or not os.path.exists(page_path):
-        return jsonify({'error': 'File not found'}), 404
-        
-    try:
-        img = Image.open(page_path)
-        doc_type, auto_crop = DocumentClassifier.classify_and_crop(img)
-        return jsonify({
-            'document_type': doc_type,
-            'crop_data': auto_crop
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/api/export', methods=['POST'])
 def export_files():
     data = request.json
     if not data:
         return jsonify({'error': 'No data provided'}), 400
+
+    # Clear existing outputs folder to prevent returning old files in zip
+    if os.path.exists(OUTPUT_FOLDER):
+        shutil.rmtree(OUTPUT_FOLDER)
+    os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
     results = []
 
@@ -225,7 +152,23 @@ def export_files():
 
         results.append(filename)
 
-    return jsonify({'success': True, 'processed': results})
+    # Create ZIP file in memory
+    memory_file = io.BytesIO()
+    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(OUTPUT_FOLDER):
+            for file in files:
+                file_path = os.path.join(root, file)
+                archive_name = os.path.relpath(file_path, OUTPUT_FOLDER)
+                zf.write(file_path, archive_name)
+    
+    memory_file.seek(0)
+    
+    return send_file(
+        memory_file,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name='PDF_Manager_Pro.zip'
+    )
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

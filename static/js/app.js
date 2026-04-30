@@ -81,9 +81,6 @@ uploadInput.addEventListener('change', async (e) => {
         btnApplyAll.disabled = false;
         btnExport.disabled = false;
         
-        // Trigger background processing for OCR/Classification
-        processAsyncClassification(data.pdfs);
-        
     } catch (error) {
         updateStatus(`Error: ${error.message}`);
     } finally {
@@ -271,7 +268,7 @@ btnExport.addEventListener('click', async () => {
     const filenames = Object.keys(pdfData);
     if (filenames.length === 0) return;
 
-    showLoading(`Exporting PDFs to categorized folders...`);
+    showLoading(`Exporting PDFs to ZIP file...`);
 
     try {
         const response = await fetch('/api/export', {
@@ -284,8 +281,18 @@ btnExport.addEventListener('click', async () => {
 
         if (!response.ok) throw new Error('Export failed');
         
-        const data = await response.json();
-        updateStatus(`Successfully exported documents from ${data.processed.length} PDFs.`);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = 'PDF_Manager_Pro.zip';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        updateStatus(`Successfully exported and downloaded ZIP file.`);
     } catch (error) {
         updateStatus(`Error: ${error.message}`);
     } finally {
@@ -309,42 +316,4 @@ function updateStatus(msg) {
     setTimeout(() => {
         statusMessage.style.opacity = 1;
     }, 100);
-}
-
-async function processAsyncClassification(newPdfs) {
-    for (const filename in newPdfs) {
-        for (let i = 0; i < newPdfs[filename].pages.length; i++) {
-            const page = newPdfs[filename].pages[i];
-            if (page.document_type === 'Pending') {
-                try {
-                    const response = await fetch('/api/classify', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ path: page.path })
-                    });
-                    
-                    if (response.ok) {
-                        const result = await response.json();
-                        page.document_type = result.document_type;
-                        page.crop_data = result.crop_data;
-                        
-                        // Auto-update custom name
-                        let baseName = filename.split('.').slice(0, -1).join('.');
-                        page.custom_name = result.document_type === 'None' ? baseName : `${baseName}_${result.document_type}`;
-                        
-                        // If this page is currently active in UI, update UI
-                        if (currentFilename === filename && currentPageIndex === i) {
-                            selectDocType.value = page.document_type;
-                            inputCustomName.value = page.custom_name;
-                            if (currentCropMode === 'document' && page.crop_data && cropper) {
-                                cropper.setData(page.crop_data);
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.error("Async classification failed for", filename, i, e);
-                }
-            }
-        }
-    }
 }
