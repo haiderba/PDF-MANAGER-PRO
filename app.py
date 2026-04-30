@@ -40,14 +40,15 @@ def upload_files():
             file.save(filepath)
 
             try:
-                # Convert all pages
-                images = convert_from_path(filepath)
+                # Convert all pages with lower DPI for speed and smaller file sizes
+                images = convert_from_path(filepath, dpi=120)
                 pages_info = []
                 
                 for idx, img in enumerate(images):
                     page_name = f"{filename}_page{idx+1}.jpg"
                     page_path = os.path.join(TEMP_IMAGES_FOLDER, page_name)
-                    img.save(page_path, 'JPEG')
+                    # Save with reduced quality to dramatically speed up frontend loading
+                    img.save(page_path, 'JPEG', quality=75, optimize=True)
                     
                     pages_info.append({
                         'page_index': idx,
