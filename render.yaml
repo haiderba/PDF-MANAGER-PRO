@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: pdf-manager-pro
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /

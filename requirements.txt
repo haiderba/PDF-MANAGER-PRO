@@ -4,3 +4,4 @@ Pillow
 Werkzeug
 pytesseract
 opencv-python-headless
+gunicorn
