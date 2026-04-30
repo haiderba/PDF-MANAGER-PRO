@@ -1,0 +1,6 @@
+Flask
+pdf2image
+Pillow
+Werkzeug
+pytesseract
+opencv-python-headless

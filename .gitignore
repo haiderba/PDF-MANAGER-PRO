@@ -1,0 +1,17 @@
+# Virtual environments
+venv/
+env/
+.env
+
+# Python caches
+__pycache__/
+*.pyc
+
+# OS generated files
+.DS_Store
+.DS_Store?
+
+# App specific data folders
+uploads/
+outputs/
+temp_images/

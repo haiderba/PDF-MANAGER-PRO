@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Bulk Crop & Export</title>
+    <!-- Cropper.js CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar glass-panel">
+            <div class="sidebar-header">
+                <h2>PDF Manager Pro</h2>
+            </div>
+            
+            <div class="upload-section">
+                <label for="pdf-upload" class="upload-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    Upload PDFs
+                </label>
+                <input type="file" id="pdf-upload" multiple accept=".pdf" style="display: none;">
+            </div>
+
+            <div class="pdf-list-container">
+                <h3>Uploaded Files (<span id="file-count">0</span>)</h3>
+                <ul id="pdf-list" class="pdf-list">
+                    <!-- Dynamic PDF list items go here -->
+                </ul>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="workspace">
+            <!-- Top Bar -->
+            <header class="topbar glass-panel">
+                <div class="page-toggles" id="page-toggles">
+                    <!-- Dynamic page buttons go here -->
+                </div>
+                
+                <div class="bulk-actions">
+                    <button id="btn-apply-all" class="btn btn-secondary" disabled title="Apply this crop to the same page across all PDFs">Apply Crop to All</button>
+                    <button id="btn-export" class="btn btn-primary" disabled>Export All</button>
+                </div>
+            </header>
+
+            <!-- Editor Area -->
+            <div class="editor-container glass-panel">
+                <div id="empty-state" class="empty-state">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    <p>Select a PDF from the sidebar to preview and crop.</p>
+                </div>
+
+                <div id="cropper-wrapper" class="cropper-wrapper" style="display: none;">
+                    <img id="image-preview" src="" alt="PDF Page Preview">
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Panel (Options) -->
+        <aside class="right-panel glass-panel">
+            <h3>Page Settings</h3>
+            
+            <div id="settings-form" class="settings-form" style="display: none;">
+                <p class="current-file">PDF: <span id="current-filename">None</span></p>
+                <p class="current-page">Page: <span id="current-page-label">1</span></p>
+                
+                <div class="form-group" style="margin-top: 15px; margin-bottom: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                    <label>Crop Mode:</label>
+                    <div style="display: flex; gap: 10px; margin-top: 5px;">
+                        <label style="font-weight: 400; font-size: 0.9rem; display: flex; align-items: center; gap: 5px;">
+                            <input type="radio" name="crop-mode" value="document" checked> Document
+                        </label>
+                        <label style="font-weight: 400; font-size: 0.9rem; display: flex; align-items: center; gap: 5px;">
+                            <input type="radio" name="crop-mode" value="profile"> Profile Photo
+                        </label>
+                    </div>
+                </div>
+
+                <div id="document-settings">
+                    <div class="form-group">
+                        <label for="doc-type">Document Type:</label>
+                        <div style="display: flex; gap: 8px;">
+                            <select id="doc-type" class="input-field" style="flex: 1;">
+                                <option value="Iqama_ID">Iqama ID</option>
+                                <option value="Insurance_Paper">Insurance Paper</option>
+                                <option value="Ajeer_Paper">Ajeer Paper</option>
+                                <option value="Unknown">Unknown</option>
+                                <option value="None">None (No suffix)</option>
+                                <option value="Ignore">Ignore / Do not export</option>
+                            </select>
+                            <button id="btn-apply-type" class="btn btn-secondary" style="padding: 10px; font-size: 0.75rem;" title="Apply to this page number across all PDFs">Apply to All</button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="custom-name">Export Name:</label>
+                        <input type="text" id="custom-name" class="input-field">
+                    </div>
+                </div>
+
+                <div id="profile-settings" style="display: none;">
+                    <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">
+                        Draw a crop box around the profile photo. It will be exported to <strong>Outputs/Photo/</strong> independently of the document crop.
+                    </p>
+                </div>
+            </div>
+
+            <div class="status-panel">
+                <h4>System Status</h4>
+                <div id="status-message" class="status-message">Ready</div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="spinner"></div>
+        <p id="loading-text">Processing...</p>
+    </div>
+
+    <!-- Cropper.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <!-- Custom App JS -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
