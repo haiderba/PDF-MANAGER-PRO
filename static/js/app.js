@@ -56,7 +56,7 @@ uploadInput.addEventListener('change', async (e) => {
         formData.append('files[]', files[i]);
     }
 
-    showLoading(`Uploading and analyzing ${files.length} PDFs... (This may take a moment for OCR)`);
+    showLoading(`Uploading and processing ${files.length} PDFs... (This may take a moment)`);
 
     try {
         const response = await fetch('/api/upload', {
